@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin - NurseNearMe</title><script src="https://cdn.tailwindcss.com"></script><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script></head>
+<body class="bg-slate-100 p-4">
+<div id="loginBox" class="max-w-md mx-auto bg-white p-6 rounded-2xl shadow mt-20">
+  <h1 class="text-2xl font-bold text-center">🔐 Admin Login</h1>
+  <p class="text-sm text-center text-slate-500">Only you can access this</p>
+  <input id="adminPass" type="password" placeholder="Admin Password" class="w-full border p-3 rounded-xl mt-4">
+  <button onclick="login()" class="w-full bg-blue-600 text-white py-3 rounded-xl mt-2 font-bold">Login</button>
+  <p class="text-xs text-center mt-2 text-slate-400">Default password: NurseAdmin123 - Change it in code!</p>
+</div>
+
+<div id="dash" class="max-w-6xl mx-auto hidden">
+  <div class="flex justify-between items-center mb-4"><h1 class="text-2xl font-bold">NurseNearMe Admin</h1><button onclick="location.reload()" class="bg-red-500 text-white px-4 py-2 rounded-full">Logout</button></div>
+  <div class="grid md:grid-cols-3 gap-4 mb-6">
+    <div class="bg-white p-4 rounded-xl shadow"><p class="text-slate-500 text-sm">Total Nurses</p><p id="statNurses" class="text-2xl font-bold">0</p></div>
+    <div class="bg-white p-4 rounded-xl shadow"><p class="text-slate-500 text-sm">Pending Approval</p><p id="statPending" class="text-2xl font-bold text-orange-500">0</p></div>
+    <div class="bg-white p-4 rounded-xl shadow"><p class="text-slate-500 text-sm">Total Earnings (10%)</p><p id="statEarnings" class="text-2xl font-bold text-green-600">$0</p></div>
+  </div>
+  <h2 class="font-bold mb-2">Pending Nurses - Verify License</h2>
+  <div id="pendingList" class="grid md:grid-cols-2 gap-4"></div>
+  <h2 class="font-bold mt-8 mb-2">Recent Bookings</h2>
+  <div id="bookingList" class="space-y-2"></div>
+</div>
+
+<script>
+const SUPABASE_URL = "PASTE_YOUR_PROJECT_URL_HERE";
+const SUPABASE_KEY = "PASTE_YOUR_ANON_KEY_HERE";
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const ADMIN_PASSWORD = "NurseAdmin123"; // CHANGE THIS!
+
+function login(){
+  if(document.getElementById('adminPass').value === ADMIN_PASSWORD){
+    document.getElementById('loginBox').classList.add('hidden');
+    document.getElementById('dash').classList.remove('hidden');
+    loadAdmin();
+  } else alert("Wrong password");
+}
+async function loadAdmin(){
+  let {data: nurses} = await supabase.from('nurses').select('*').order('created_at',{ascending:false});
+  let {data: bookings} = await supabase.from('bookings').select('*').order('created_at',{ascending:false}).limit(20);
+  document.getElementById('statNurses').innerText = nurses.length;
+  let pending = nurses.filter(n=>!n.verified);
+  document.getElementById('statPending').innerText = pending.length;
+  let totalComm = bookings.reduce((s,b)=> s + (b.commission||0), 0);
+  document.getElementById('statEarnings').innerText = "$" + totalComm;
+  
+  document.getElementById('pendingList').innerHTML = pending.map(n=>`
+    <div class="bg-white p-4 rounded-xl shadow">
+      <div class="flex gap-3"><img src="${n.photo_url||''}" class="w-16 h-16 rounded-full object-cover bg-slate-200">
+      <div><p class="font-bold">${n.full_name}</p><p class="text-sm">${n.city}, ${n.country} • ${n.phone}</p><p class="text-sm">License: <b>${n.license_number}</b> • $${n.price_per_day}/day</p><p class="text-xs">${n.services} • ${n.bio||''}</p></div></div>
+      <div class="flex gap-2 mt-3"><button onclick="approve('${n.id}')" class="flex-1 bg-green-500 text-white py-2 rounded-xl font-bold">✅ Approve & Go Live</button><button onclick="rejectNurse('${n.id}')" class="flex-1 bg-red-500 text-white py-2 rounded-xl">Reject</button></div>
+    </div>`).join('') || "<p class='text-slate-500'>No pending nurses</p>";
+
+  document.getElementById('bookingList').innerHTML = bookings.map(b=>`
+    <div class="bg-white p-3 rounded-xl flex justify-between text-sm"><span>${b.patient_name} → Nurse ID ${b.nurse_id?.slice(0,8)} • ${b.days} days • ${b.status}</span><span class="font-bold">Total $${b.total_amount} • Your cut $${b.commission}</span></div>`).join('');
+}
+async function approve(id){ await supabase.from('nurses').update({verified:true}).eq('id',id); alert("Approved! Nurse is now live."); loadAdmin(); }
+async function rejectNurse(id){ if(confirm("Delete this nurse?")){ await supabase.from('nurses').delete().eq('id',id); loadAdmin(); } }
+</script></body></html>
